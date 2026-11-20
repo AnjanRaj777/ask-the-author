@@ -1,0 +1,50 @@
+[
+  {
+    "id": "ch1-opening",
+    "question": "What does the opening line say about a single man with a good fortune?",
+    "spoilerLimit": 1,
+    "expectedChapters": [1],
+    "expectedMode": "grounded",
+    "type": "grounded"
+  },
+  {
+    "id": "ch1-bingley-income",
+    "question": "How much is Mr. Bingley's fortune per year according to Mrs. Bennet?",
+    "spoilerLimit": 1,
+    "expectedChapters": [1],
+    "expectedMode": "grounded",
+    "type": "grounded"
+  },
+  {
+    "id": "ch1-bennet-preference",
+    "question": "Which daughter does Mr. Bennet say has something more of quickness than her sisters?",
+    "spoilerLimit": 1,
+    "expectedChapters": [1],
+    "expectedMode": "grounded",
+    "type": "grounded"
+  },
+  {
+    "id": "ch2-visit-reveal",
+    "question": "How does Mrs. Bennet find out that Mr. Bennet actually visited Mr. Bingley?",
+    "spoilerLimit": 2,
+    "expectedChapters": [2],
+    "expectedMode": "grounded",
+    "type": "grounded"
+  },
+  {
+    "id": "spoiler-ch2-blocked-at-ch1",
+    "question": "Did Mr. Bennet actually visit Mr. Bingley, and how did he reveal it?",
+    "spoilerLimit": 1,
+    "expectedChapters": [],
+    "forbiddenChapters": [2],
+    "type": "spoiler"
+  },
+  {
+    "id": "abstention-favorite-food",
+    "question": "What is Mr. Darcy's favorite breakfast food?",
+    "spoilerLimit": 2,
+    "expectedChapters": [],
+    "expectedMode": "not_in_book",
+    "type": "abstention"
+  }
+]
