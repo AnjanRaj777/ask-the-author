@@ -1,7 +1,7 @@
-export type BookSource = "public_domain" | "upload";
+export type BookSource = "public_domain" | "upload" | "text_paste" | "no_file";
 export type BookStatus = "pending" | "parsing" | "embedding" | "ready" | "failed";
 export type PersonaMode = "author" | "guide";
-export type AnswerMode = "grounded" | "speculation" | "not_in_book";
+export type AnswerMode = "grounded" | "speculation" | "not_in_book" | "memory";
 
 export interface Book {
   id: string;

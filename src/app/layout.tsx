@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, Inter } from "next/font/google";
+import { AppearanceLoader } from "@/components/settings/AppearanceLoader";
 import "./globals.css";
 
 const serif = Cormorant_Garamond({
@@ -33,7 +34,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${serif.variable} ${sans.variable}`}>
-      <body className="min-h-svh text-ink antialiased">{children}</body>
+      <body className="min-h-svh text-ink antialiased">
+        <AppearanceLoader />
+        {children}
+      </body>
     </html>
   );
 }

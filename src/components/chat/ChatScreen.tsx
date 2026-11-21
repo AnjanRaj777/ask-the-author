@@ -5,24 +5,40 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowUp,
+  BookOpen,
   Bookmark,
   BookMarked,
+  Check,
+  Copy,
   Library,
   PanelLeft,
   PanelLeftClose,
+  Settings,
   SquarePen,
+  User,
+  X,
 } from "lucide-react";
+import { SettingsModal } from "@/components/settings/SettingsModal";
 import {
   UPLOAD_STORAGE_KEY,
   uploadToChatBook,
   type ChatBook,
   type SelectedBook,
 } from "@/lib/catalog";
+import {
+  getOrCreateUserId,
+  loadBookChat,
+  loadUserChats,
+  saveBookChat,
+  setActiveUserId,
+  type SavedBookChat,
+} from "@/lib/userHistory";
 import type { Citation } from "@/lib/types";
 import { ModeBadge, type BadgeMode } from "./ModeBadge";
 
 interface DisplayCitation {
   n: number;
+  chunkId?: string;
   label: string;
   passage: string;
 }
@@ -41,10 +57,64 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
   const [book, setBook] = useState<ChatBook | null>(initialBook);
   const [missing, setMissing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [pending, setPending] = useState(false);
   const [readTo, setReadTo] = useState(1);
+  const [userId, setUserId] = useState("");
+  const [userChats, setUserChats] = useState<SavedBookChat[]>([]);
+  const [drawerCitation, setDrawerCitation] = useState<DisplayCitation | null>(
+    null
+  );
   const listRef = useRef<HTMLDivElement>(null);
+
+  // Initialize userId and restore previous chat for this book.
+  useEffect(() => {
+    const uid = getOrCreateUserId();
+    setUserId(uid);
+    setUserChats(loadUserChats(uid));
+  }, []);
+
+  useEffect(() => {
+    if (!userId || !book) return;
+    const saved = loadBookChat(userId, book.id);
+    if (saved) {
+      setMessages(saved.messages);
+      setReadTo(saved.readTo || 1);
+    } else {
+      setMessages([]);
+      setReadTo(1);
+    }
+  }, [userId, book?.id]);
+
+  // Persist non-empty messages for the active userId and book.
+  useEffect(() => {
+    if (!userId || !book || pending) return;
+    const cleanMessages = messages.filter(
+      (m) => !m.error && m.content.trim().length > 0
+    );
+    if (cleanMessages.length === 0) return;
+
+    const updated = saveBookChat(userId, {
+      bookId: book.id,
+      title: book.title,
+      author: book.author,
+      personaName: book.personaName,
+      kind: book.kind,
+      chapterCount: book.chapterCount,
+      chapterLabel: book.chapterLabel,
+      readTo,
+      updatedAt: new Date().toISOString(),
+      messages: cleanMessages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        mode: m.mode,
+        citations: m.citations,
+      })),
+    });
+    setUserChats(updated);
+  }, [messages, readTo, pending, userId, book]);
 
   // Uploaded books are handed over from the landing page via sessionStorage.
   useEffect(() => {
@@ -177,6 +247,7 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
           } else if (event.type === "citations") {
             const mapped: DisplayCitation[] = event.value.map((c) => ({
               n: c.n,
+              chunkId: c.chunkId,
               label:
                 c.chapterTitle ??
                 `${book.chapterLabel} ${c.chapterIdx}${c.page ? `, p. ${c.page}` : ""}`,
@@ -216,8 +287,14 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
     />
   );
 
+  const handleSwitchUserId = (nextId: string) => {
+    const active = setActiveUserId(nextId);
+    setUserId(active);
+    setUserChats(loadUserChats(active));
+  };
+
   return (
-    <div className="flex h-svh flex-col">
+    <div className="flex h-svh overflow-hidden">
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -225,17 +302,28 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
           setMessages([]);
           setSidebarOpen(false);
         }}
+        userId={userId}
+        onSwitchUserId={handleSwitchUserId}
+        userChats={userChats}
+        currentBookId={book.id}
+        onOpenSettings={() => {
+          setSidebarOpen(false);
+          setSettingsOpen(true);
+        }}
       />
 
+      <div className="flex min-w-0 flex-1 flex-col">
       <header className="flex items-center gap-2 px-3 pt-3 sm:px-4">
-        <button
-          type="button"
-          aria-label="Open sidebar"
-          onClick={() => setSidebarOpen(true)}
-          className="grid h-9 w-9 place-items-center rounded-lg text-ink-soft transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
-        >
-          <PanelLeft className="h-5 w-5" />
-        </button>
+        {!sidebarOpen && (
+          <button
+            type="button"
+            aria-label="Open sidebar"
+            onClick={() => setSidebarOpen(true)}
+            className="grid h-9 w-9 place-items-center rounded-lg text-ink-soft transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+          >
+            <PanelLeft className="h-5 w-5" />
+          </button>
+        )}
         <AnimatePresence>
           {!isEmpty && (
             <motion.div
@@ -249,6 +337,15 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
             </motion.div>
           )}
         </AnimatePresence>
+        <button
+          type="button"
+          aria-label="Customize look"
+          title="Settings"
+          onClick={() => setSettingsOpen(true)}
+          className="ml-auto grid h-9 w-9 place-items-center rounded-lg text-ink-soft transition hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+        >
+          <Settings className="h-5 w-5" />
+        </button>
       </header>
 
       {isEmpty ? (
@@ -273,7 +370,7 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
                     key={q}
                     type="button"
                     onClick={() => sendQuestion(q)}
-                    className="rounded-full border border-ink/15 bg-white/50 px-3.5 py-1.5 text-xs text-ink-soft transition hover:border-ink/30 hover:bg-white hover:text-ink"
+                    className="rounded-full border border-ink/15 bg-page/75 px-3.5 py-1.5 text-xs text-ink-soft transition hover:border-ink/30 hover:bg-page hover:text-ink"
                   >
                     {q}
                   </button>
@@ -297,6 +394,7 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
                     key={m.id}
                     message={m}
                     personaName={book.personaName}
+                    onOpenContext={setDrawerCitation}
                   />
                 )
               )}
@@ -314,6 +412,18 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
         {book.kind === "library" ? ` of ${book.author}` : ""}, not the real
         author · AI can make mistakes. Check the citations.
       </footer>
+
+      <CitationContextDrawer
+        citation={drawerCitation}
+        spoilerLimit={readTo}
+        onClose={() => setDrawerCitation(null)}
+      />
+
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
+      </div>
     </div>
   );
 }
@@ -403,7 +513,7 @@ function Composer({
           e.preventDefault();
           submit();
         }}
-        className="flex items-end gap-2 rounded-3xl border border-ink/15 bg-white/80 p-2 shadow-[0_10px_30px_-14px_rgba(42,34,29,0.3)] transition focus-within:border-ink/30"
+        className="flex items-end gap-2 rounded-3xl border border-ink/15 bg-page/90 p-2 shadow-[0_10px_30px_-14px_rgba(42,34,29,0.3)] transition focus-within:border-ink/30"
       >
         <button
           type="button"
@@ -463,9 +573,11 @@ function UserBubble({ text }: { text: string }) {
 function AssistantMessage({
   message,
   personaName,
+  onOpenContext,
 }: {
   message: Message;
   personaName: string;
+  onOpenContext: (citation: DisplayCitation) => void;
 }) {
   const [openCitation, setOpenCitation] = useState<number | null>(null);
   const active = message.citations?.find((c) => c.n === openCitation);
@@ -487,9 +599,23 @@ function AssistantMessage({
           {message.error}
         </p>
       ) : (
-        <p className="font-serif text-[19px] leading-relaxed text-ink">
-          {message.content}
-        </p>
+        <div
+          className="space-y-3.5 leading-relaxed text-ink"
+          style={{
+            fontFamily: "var(--chat-font)",
+            fontSize: "var(--chat-size)",
+          }}
+        >
+          {message.content
+            .split(/\n{2,}/)
+            .map((p) => p.trim())
+            .filter(Boolean)
+            .map((paragraph, idx) => (
+              <p key={idx} className="whitespace-pre-line">
+                {paragraph}
+              </p>
+            ))}
+        </div>
       )}
       {message.citations && message.citations.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -519,9 +645,19 @@ function AssistantMessage({
             className="overflow-hidden border-l-2 border-leather/50 pl-4 font-serif text-base italic text-ink-soft"
           >
             <p className="py-1">&ldquo;{active.passage}&rdquo;</p>
-            <p className="pb-1 font-sans text-[11px] not-italic">
-              {active.label}
-            </p>
+            <div className="flex items-center justify-between gap-2 pb-1 font-sans text-[11px] not-italic">
+              <span>{active.label}</span>
+              {active.chunkId && (
+                <button
+                  type="button"
+                  onClick={() => onOpenContext(active)}
+                  className="inline-flex items-center gap-1 font-medium text-leather underline underline-offset-2 hover:opacity-80"
+                >
+                  <BookOpen className="h-3 w-3" />
+                  Open in context
+                </button>
+              )}
+            </div>
           </motion.blockquote>
         )}
       </AnimatePresence>
@@ -553,11 +689,25 @@ function Sidebar({
   open,
   onClose,
   onNewChat,
+  userId,
+  onSwitchUserId,
+  userChats,
+  currentBookId,
+  onOpenSettings,
 }: {
   open: boolean;
   onClose: () => void;
   onNewChat: () => void;
+  userId: string;
+  onSwitchUserId: (nextId: string) => void;
+  userChats: SavedBookChat[];
+  currentBookId: string;
+  onOpenSettings: () => void;
 }) {
+  const [editingId, setEditingId] = useState(false);
+  const [draftId, setDraftId] = useState("");
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -568,22 +718,41 @@ function Sidebar({
   const item =
     "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-ink transition hover:bg-ink/5";
 
+  const copyId = async () => {
+    if (!userId) return;
+    try {
+      await navigator.clipboard.writeText(userId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const submitUserId = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!draftId.trim()) return;
+    onSwitchUserId(draftId.trim());
+    setEditingId(false);
+    setDraftId("");
+  };
+
   return (
     <AnimatePresence>
       {open && (
         <>
           <motion.div
-            className="fixed inset-0 z-30 bg-ink/25"
+            className="fixed inset-0 z-30 bg-black/35 md:hidden"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
           />
           <motion.aside
-            className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-ink/10 bg-paper-dark p-3"
-            initial={{ x: -300 }}
+            className="fixed inset-y-0 left-0 z-40 flex w-72 shrink-0 flex-col border-r border-ink/10 bg-paper-dark p-3 shadow-[inset_-14px_0_24px_-20px_rgba(0,0,0,0.35)] md:static md:z-auto"
+            initial={{ x: -288 }}
             animate={{ x: 0 }}
-            exit={{ x: -300 }}
+            exit={{ x: -288 }}
             transition={{ type: "spring", damping: 32, stiffness: 320 }}
             aria-label="Sidebar"
           >
@@ -608,6 +777,9 @@ function Sidebar({
               <Link href="/#library" className={item}>
                 <Library className="h-4 w-4" /> Library
               </Link>
+              <button type="button" onClick={onOpenSettings} className={item}>
+                <Settings className="h-4 w-4" /> Settings
+              </button>
               <span className={`${item} cursor-default opacity-50 hover:bg-transparent`}>
                 <Bookmark className="h-4 w-4" /> Saved notes
                 <span className="ml-auto text-[10px] uppercase tracking-wider">
@@ -616,19 +788,234 @@ function Sidebar({
               </span>
             </nav>
 
-            <p className="mt-6 px-2.5 text-[11px] font-medium uppercase tracking-[0.2em] text-ink-soft">
-              Conversations
+            <div className="mt-5 rounded-xl border border-ink/10 bg-page/65 p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-ink-soft">
+                  <User className="h-3 w-3" /> User ID
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={copyId}
+                    aria-label="Copy User ID"
+                    className="rounded px-1.5 py-0.5 text-[11px] text-ink-soft hover:bg-ink/5 hover:text-ink"
+                  >
+                    {copied ? (
+                      <Check className="h-3 w-3 text-leather" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftId(userId);
+                      setEditingId((v) => !v);
+                    }}
+                    className="rounded px-1.5 py-0.5 text-[11px] font-medium text-leather hover:bg-leather/10"
+                  >
+                    {editingId ? "Cancel" : "Switch"}
+                  </button>
+                </div>
+              </div>
+              {editingId ? (
+                <form onSubmit={submitUserId} className="mt-2 flex gap-1.5">
+                  <input
+                    type="text"
+                    value={draftId}
+                    onChange={(e) => setDraftId(e.target.value)}
+                    placeholder="Enter user ID"
+                    className="min-w-0 flex-1 rounded-lg border border-ink/15 bg-page px-2 py-1 text-xs text-ink focus:border-leather focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-ink px-2.5 py-1 text-xs font-medium text-paper hover:bg-leather"
+                  >
+                    Save
+                  </button>
+                </form>
+              ) : (
+                <p className="mt-1 truncate font-mono text-xs text-ink">
+                  {userId || "Loading…"}
+                </p>
+              )}
+            </div>
+
+            <p className="mt-5 px-2.5 text-[11px] font-medium uppercase tracking-[0.2em] text-ink-soft">
+              Previous chat books
             </p>
-            <p className="mt-2 px-2.5 text-xs leading-relaxed text-ink-soft">
-              Sign in to keep your conversations and come back to them later.
-            </p>
+            <div className="quiet-scroll mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+              {userChats.length === 0 ? (
+                <p className="px-2.5 text-xs leading-relaxed text-ink-soft">
+                  No previous chat books yet. Ask a question to save your
+                  conversation here.
+                </p>
+              ) : (
+                userChats.map((chat) => {
+                  const isActive = chat.bookId === currentBookId;
+                  return (
+                    <Link
+                      key={chat.bookId}
+                      href={`/chat/${chat.bookId}`}
+                      onClick={onClose}
+                      className={`block rounded-lg px-2.5 py-2 transition ${
+                        isActive
+                          ? "bg-leather/12 text-ink"
+                          : "text-ink hover:bg-ink/5"
+                      }`}
+                    >
+                      <p className="truncate font-serif text-sm font-semibold">
+                        {chat.title}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-ink-soft">
+                        {chat.personaName} · {chat.messages.length}{" "}
+                        {chat.messages.length === 1 ? "message" : "messages"}
+                      </p>
+                    </Link>
+                  );
+                })
+              )}
+            </div>
 
             <Link
               href="/login"
-              className="mt-auto rounded-full bg-ink px-4 py-2.5 text-center text-sm font-medium text-paper transition hover:bg-leather"
+              className="mt-3 rounded-full bg-ink px-4 py-2.5 text-center text-sm font-medium text-paper transition hover:bg-leather"
             >
-              Sign in
+              Manage User ID
             </Link>
+          </motion.aside>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+interface ContextChunk {
+  id: string;
+  seq: number;
+  page: number | null;
+  content: string;
+  isTarget: boolean;
+}
+
+function CitationContextDrawer({
+  citation,
+  spoilerLimit,
+  onClose,
+}: {
+  citation: DisplayCitation | null;
+  spoilerLimit: number;
+  onClose: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [chunks, setChunks] = useState<ContextChunk[]>([]);
+  const [heading, setHeading] = useState<string>("");
+
+  useEffect(() => {
+    if (!citation?.chunkId) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setChunks([]);
+
+    fetch(
+      `/api/chunks/${citation.chunkId}/context?spoilerLimit=${encodeURIComponent(spoilerLimit)}`
+    )
+      .then(async (res) => {
+        const data = (await res.json()) as {
+          error?: string;
+          chapterIdx?: number;
+          chapterTitle?: string | null;
+          page?: number | null;
+          chunks?: ContextChunk[];
+        };
+        if (!res.ok) throw new Error(data.error || "Failed to load passage.");
+        if (cancelled) return;
+        const chLabel = data.chapterTitle
+          ? `Ch. ${data.chapterIdx} · ${data.chapterTitle}`
+          : `Chapter ${data.chapterIdx}`;
+        setHeading(data.page ? `${chLabel}, p. ${data.page}` : chLabel);
+        setChunks(data.chunks ?? []);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "Failed to load passage."
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [citation, spoilerLimit]);
+
+  return (
+    <AnimatePresence>
+      {citation && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 z-40 bg-ink/20 backdrop-blur-[1px]"
+          />
+          <motion.aside
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 30, stiffness: 320 }}
+            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-ink/10 bg-paper p-5 shadow-xl"
+            aria-label="Citation context"
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-ink/10 pb-3">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-leather">
+                  Citation [{citation.n}]
+                </p>
+                <h2 className="mt-0.5 font-serif text-lg font-semibold text-ink">
+                  {heading || citation.label}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close citation drawer"
+                className="grid h-8 w-8 place-items-center rounded-lg text-ink-soft transition hover:bg-ink/5 hover:text-ink"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="quiet-scroll mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
+              {loading && (
+                <p className="text-sm text-ink-soft">Loading passage context…</p>
+              )}
+              {error && (
+                <p className="rounded-xl border border-amber-300 bg-amber-50/90 px-3.5 py-2.5 text-sm text-amber-950">
+                  {error}
+                </p>
+              )}
+              {!loading &&
+                !error &&
+                chunks.map((c) => (
+                  <div
+                    key={c.id}
+                    className={`rounded-xl px-4 py-3 font-serif text-[16px] leading-relaxed ${
+                      c.isTarget
+                        ? "border border-leather/40 bg-leather/[0.08] text-ink"
+                        : "text-ink-soft"
+                    }`}
+                  >
+                    {c.content}
+                  </div>
+                ))}
+            </div>
           </motion.aside>
         </>
       )}

@@ -2,10 +2,38 @@ import type { AnswerMode, Citation } from "@/lib/types";
 import type { RetrievedChunk } from "@/lib/rag/retrieve";
 
 const CITATION_RE = /\[(\d+)\]/g;
+const QUOTE_RE = /[""\u201c]([^""\u201d\n]{20,})[""\u201d]/g;
+
+function normalizeForQuoteMatch(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[\u2018\u2019']/g, "'")
+    .replace(/[\u201c\u201d"]/g, '"')
+    .replace(/[^a-z0-9'\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Strip quotation marks from quoted spans >= 20 chars that do not appear
+ * verbatim in the retrieved passages, so paraphrases aren't shown as quotes.
+ */
+function verifyQuotes(answer: string, chunks: RetrievedChunk[]): string {
+  if (chunks.length === 0) {
+    return answer.replace(QUOTE_RE, "$1");
+  }
+  const corpus = normalizeForQuoteMatch(chunks.map((c) => c.content).join(" "));
+  return answer.replace(QUOTE_RE, (full, inner: string) => {
+    const normalized = normalizeForQuoteMatch(inner);
+    if (normalized.length < 12) return full;
+    return corpus.includes(normalized) ? full : inner;
+  });
+}
 
 /**
  * Validate `[n]` citations in the generated answer against the retrieved chunks.
  * - Drops any `[n]` that does not correspond to a retrieved chunk or violates spoilerLimit.
+ * - Verifies quoted spans >= 20 chars against retrieved chunks.
  * - Downgrades `grounded` to `speculation` if zero valid citations remain.
  */
 export function validateAnswer(params: {
@@ -54,8 +82,13 @@ export function validateAnswer(params: {
     mode = "speculation";
   }
 
+  const quoteChecked = verifyQuotes(cleanedAnswer, chunks);
+
   return {
-    answer: cleanedAnswer.replace(/\s{2,}/g, " ").trim(),
+    answer: quoteChecked
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim(),
     mode,
     citations,
   };

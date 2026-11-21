@@ -83,7 +83,8 @@ async function main() {
 
     const resp = await muse.chat.completions.create({
       model: DEFAULT_CHAT_MODEL,
-      max_tokens: 512,
+      max_tokens: 2048,
+      reasoning_effort: "low",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: c.question },

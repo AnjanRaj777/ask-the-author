@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_CHAT_MODEL, getMuseClient } from "@/lib/ai/muse";
-import { buildSystemPrompt } from "@/lib/ai/prompts";
+import { buildNoFileSystemPrompt, buildSystemPrompt } from "@/lib/ai/prompts";
 import { getSupabaseServerClient } from "@/lib/db/supabase";
 import { retrieveChunks } from "@/lib/rag/retrieve";
+import { rewriteFollowUpQuery } from "@/lib/rag/rewrite";
 import { validateAnswer } from "@/lib/rag/validate";
 import type { AnswerMode, Persona, PersonaMode } from "@/lib/types";
 
@@ -24,6 +25,7 @@ function parseMode(raw: string): AnswerMode {
   const normalized = raw.trim().toLowerCase();
   if (normalized === "grounded") return "grounded";
   if (normalized === "speculation") return "speculation";
+  if (normalized === "memory") return "memory";
   return "not_in_book";
 }
 
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest) {
   const supabase = getSupabaseServerClient();
   const bookQuery = supabase
     .from("books")
-    .select("id, title, author, chapter_count, persona_mode, status")
+    .select("id, title, author, chapter_count, persona_mode, source, status")
     .limit(1);
 
   const { data: book, error: bookErr } = UUID_RE.test(bookKey)
@@ -101,37 +103,54 @@ export async function POST(req: NextRequest) {
     .eq("book_id", book.id)
     .maybeSingle();
 
-  let chunks;
-  try {
-    chunks = await retrieveChunks({
-      bookId: book.id,
-      question,
-      spoilerLimit,
-      matchCount: 8,
-    });
-  } catch (err) {
-    return NextResponse.json(
-      {
-        error:
-          err instanceof Error ? err.message : "Failed to retrieve passages.",
-      },
-      { status: 500 }
-    );
-  }
-
-  const systemPrompt = buildSystemPrompt({
-    title: book.title,
-    author: book.author,
-    personaMode: book.persona_mode as PersonaMode,
-    persona: (persona as Persona | null) ?? null,
-    spoilerLimit,
-    chunks,
-  });
-
   const history = (body.history ?? []).slice(-8).map((m) => ({
     role: m.role,
     content: m.content,
   }));
+
+  const isNoFile = book.source === "no_file";
+
+  let chunks: Awaited<ReturnType<typeof retrieveChunks>> = [];
+  if (!isNoFile) {
+    const searchQuery = await rewriteFollowUpQuery({
+      question,
+      history,
+      bookTitle: book.title,
+    });
+
+    try {
+      chunks = await retrieveChunks({
+        bookId: book.id,
+        question: searchQuery,
+        spoilerLimit,
+        matchCount: 8,
+      });
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error:
+            err instanceof Error ? err.message : "Failed to retrieve passages.",
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  const systemPrompt = isNoFile
+    ? buildNoFileSystemPrompt({
+        title: book.title,
+        author: book.author,
+        persona: (persona as Persona | null) ?? null,
+        spoilerLimit,
+      })
+    : buildSystemPrompt({
+        title: book.title,
+        author: book.author,
+        personaMode: book.persona_mode as PersonaMode,
+        persona: (persona as Persona | null) ?? null,
+        spoilerLimit,
+        chunks,
+      });
 
   const muse = getMuseClient();
 
@@ -146,7 +165,8 @@ export async function POST(req: NextRequest) {
       try {
         const messageStream = await muse.chat.completions.create({
           model: DEFAULT_CHAT_MODEL,
-          max_tokens: 1024,
+          max_tokens: 2048,
+          reasoning_effort: "low",
           stream: true,
           messages: [
             { role: "system", content: systemPrompt },
@@ -217,12 +237,18 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        const validated = validateAnswer({
-          rawAnswer,
-          mode: detectedMode,
-          chunks,
-          spoilerLimit,
-        });
+        const validated = isNoFile
+          ? {
+              mode: "memory" as AnswerMode,
+              answer: rawAnswer.replace(/\[\d+\]/g, "").trim(),
+              citations: [],
+            }
+          : validateAnswer({
+              rawAnswer,
+              mode: detectedMode,
+              chunks,
+              spoilerLimit,
+            });
 
         controller.enqueue(
           sseLine({ type: "citations", value: validated.citations })

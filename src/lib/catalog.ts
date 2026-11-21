@@ -128,12 +128,21 @@ export function toChatBook(b: CatalogBook): ChatBook {
 }
 
 export function uploadToChatBook(s: SelectedBook): ChatBook {
+  const hasAuthor =
+    Boolean(s.author) && !/^unknown author$/i.test(s.author.trim());
+  const personaName =
+    s.personaName && s.personaName !== "Book Guide"
+      ? s.personaName
+      : hasAuthor
+        ? s.author
+        : "The Author";
+
   return {
     kind: "upload",
     id: "upload",
     title: s.title,
     author: s.author,
-    personaName: "Book Guide",
+    personaName,
     chapterCount: null,
     chapterLabel: "Chapter",
     greeting: `What would you like to know about ${s.title}?`,

@@ -15,7 +15,7 @@ export async function GET() {
 
   return NextResponse.json({
     ok: true,
-    phase: 1,
+    phase: 2,
     llmModel: process.env.MUSE_MODEL || "muse-wonder-1.0",
     env: {
       supabaseConfigured: hasSupabase,

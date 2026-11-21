@@ -1,4 +1,4 @@
-import { BookOpenCheck, Lightbulb, SearchX, Sparkles } from "lucide-react";
+import { BookOpenCheck, Brain, Lightbulb, SearchX, Sparkles } from "lucide-react";
 import type { AnswerMode } from "@/lib/types";
 
 export type BadgeMode = AnswerMode | "preview";
@@ -21,6 +21,11 @@ const STYLES: Record<
     label: "Not in the book",
     className: "border-stone-300 bg-stone-100 text-stone-700",
     Icon: SearchX,
+  },
+  memory: {
+    label: "AI memory · no citations",
+    className: "border-sky-200 bg-sky-50 text-sky-900",
+    Icon: Brain,
   },
   preview: {
     label: "Design preview",

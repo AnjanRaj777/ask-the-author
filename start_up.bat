@@ -27,7 +27,7 @@ if not exist "node_modules" (
 
 if not exist ".env.local" if exist ".env.example" (
     echo [INFO] .env.local not found. Frontend preview will run without API keys.
-    echo        Copy .env.example to .env.local when ready to connect Supabase and Claude.
+    echo        Copy .env.example to .env.local when ready to connect Supabase and Muse Wonder.
     echo.
 )
 

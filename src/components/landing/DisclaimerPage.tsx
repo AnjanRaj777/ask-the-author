@@ -27,12 +27,12 @@ export function DisclaimerPage({
       text: !book ? (
         <>
           You&apos;ll be talking to an <strong>AI simulation</strong> of the
-          author (or a Book Guide for uploads), not the real author.
+          author, not the real author.
         </>
       ) : isUpload ? (
         <>
-          You&apos;ll be talking to an <strong>AI Book Guide</strong>, not the
-          author.
+          You&apos;ll be talking to an <strong>AI simulation</strong> of the
+          author, not the real author.
         </>
       ) : (
         <>

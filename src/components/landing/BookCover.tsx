@@ -12,42 +12,63 @@ export function BookCover({ orientation, titleSize }: BookCoverProps) {
 
   return (
     <div
-      className={`leather relative h-full w-full overflow-hidden shadow-[0_30px_60px_-20px_rgba(40,24,14,0.65)] ${
+      className={`leather relative h-full w-full overflow-hidden shadow-[0_32px_65px_-16px_rgba(24,14,8,0.75),0_8px_18px_-6px_rgba(24,14,8,0.5)] ${
         horizontal ? "rounded-l-sm rounded-r-md" : "rounded-t-sm rounded-b-md"
       }`}
     >
-      {/* Hinge / spine shading + leather crease */}
+      {/* Curved spine + hinge groove */}
       <div
         className={`absolute ${
           horizontal
-            ? "inset-y-0 left-0 w-7 bg-linear-to-r"
-            : "inset-x-0 top-0 h-7 bg-linear-to-b"
-        } from-black/55 via-black/20 to-transparent`}
+            ? "inset-y-0 left-0 w-9 bg-linear-to-r"
+            : "inset-x-0 top-0 h-9 bg-linear-to-b"
+        } from-black/65 via-black/25 to-transparent`}
       />
       <div
-        className={`absolute bg-black/25 ${
-          horizontal ? "inset-y-0 left-5 w-px" : "inset-x-0 top-5 h-px"
+        className={`absolute bg-black/35 ${
+          horizontal ? "inset-y-0 left-6 w-[2px]" : "inset-x-0 top-6 h-[2px]"
         }`}
       />
       <div
-        className={`absolute bg-white/10 ${
-          horizontal ? "inset-y-0 left-[21px] w-px" : "inset-x-0 top-[21px] h-px"
+        className={`absolute bg-white/15 ${
+          horizontal ? "inset-y-0 left-[26px] w-px" : "inset-x-0 top-[26px] h-px"
         }`}
+      />
+
+      {/* Raised spine binding ribs */}
+      {horizontal && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-8 left-0 flex w-6 flex-col justify-between"
+        >
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="h-2 w-full bg-linear-to-b from-white/12 via-black/15 to-black/45"
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Subtle bevel highlight along outer cover edges */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-white/10"
       />
 
       {/* Gold silk ribbon bookmark */}
       <div
         aria-hidden
-        className="absolute left-9 top-0 z-10 h-12 w-5 drop-shadow-[0_3px_4px_rgba(0,0,0,0.45)] sm:left-11 sm:h-14 sm:w-6"
+        className="absolute left-10 top-0 z-10 h-14 w-5 drop-shadow-[0_4px_6px_rgba(0,0,0,0.55)] sm:left-12 sm:h-16 sm:w-6"
         style={{
           background:
-            "linear-gradient(135deg, #f3dc99 0%, #c89d47 55%, #9e7529 100%)",
-          clipPath: "polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%)",
+            "repeating-linear-gradient(90deg, rgba(255,255,255,0.06) 0 1px, transparent 1px 2px), linear-gradient(135deg, #f5e2a8 0%, #c89d47 52%, #8f6720 100%)",
+          clipPath: "polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%)",
         }}
       />
 
       {/* Gold double frame + ornate corner flourishes */}
-      <div className="absolute inset-4 rounded-[3px] border border-gold/65 sm:inset-6">
+      <div className="absolute inset-4 rounded-[3px] border border-gold/65 shadow-[inset_0_0_24px_rgba(0,0,0,0.22)] sm:inset-6">
         <div className="absolute inset-1.5 rounded-[2px] border border-gold/30" />
         <CornerFlourish className="left-0.5 top-0.5" />
         <CornerFlourish className="right-0.5 top-0.5 -scale-x-100" />
@@ -58,7 +79,7 @@ export function BookCover({ orientation, titleSize }: BookCoverProps) {
       <div className="relative flex h-full flex-col items-center justify-center px-10 text-center">
         <Ornament />
         <h2
-          className="mt-4 font-serif font-semibold leading-[0.95] tracking-wide text-gold drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]"
+          className="mt-4 font-serif font-semibold leading-[0.95] tracking-wide text-gold drop-shadow-[0_2px_2px_rgba(0,0,0,0.6)]"
           style={{ fontSize: titleSize }}
         >
           Ask the
@@ -67,7 +88,7 @@ export function BookCover({ orientation, titleSize }: BookCoverProps) {
         </h2>
         <div className="my-4 h-px w-14 bg-gold/55" />
         <p
-          className="font-serif italic text-gold/85 drop-shadow-[0_1px_0_rgba(0,0,0,0.35)]"
+          className="font-serif italic text-gold/85 drop-shadow-[0_1px_1px_rgba(0,0,0,0.45)]"
           style={{ fontSize: Math.max(13, titleSize * 0.28) }}
         >
           Conversations drawn from the page

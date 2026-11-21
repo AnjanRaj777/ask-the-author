@@ -85,11 +85,13 @@ The MVP assumes **casual readers first, students second**. Both need the same co
 - Persistent, non-dismissable label in chat header: *"AI simulation, not the real author. Answers are based on the book's text."*
 - First-run modal explaining citations, speculation, and spoilers.
 
-### F6. Uploads (Phase 2)
-- EPUB (preferred), PDF (text-based), TXT. Max size of about 20 MB.
-- User confirms "I own this copy and it's for personal use."
-- Uploaded books are **private to the uploader** (row-level security).
-- Ingest progress UI: uploading → parsing → chunking → embedding → ready.
+### F6. Uploads & Zero-File Book Acquisition (Phase 2)
+Finding an EPUB or PDF file manually is a major friction point. The Library page (`"Choose a book"`) should provide a unified **Search & Add** bar with tabs so users can start chatting with or without a file:
+1. **Search & one-click public-domain import:** Search Project Gutenberg (via Gutendex), Standard Ebooks, and Open Library by title or author directly inside the Library page and click **Import & Chat**. The backend fetches the EPUB/TXT, parses chapters, embeds chunks, and caches the book in Supabase so future readers get it instantly.
+2. **File upload (existing):** EPUB (preferred), PDF (text-based), TXT up to 20 MB, with personal-use confirmation.
+3. **Paste text or web URL:** Paste a chapter/excerpt or enter an article/essay URL to create an instant grounded chat with citations.
+4. **Title & Author (no-file fallback):** For modern or copyrighted books where the user has no file, enter **Title + Author** (and optional current chapter) to chat in the author's voice using the model's literary knowledge—clearly labeled with a **`AI memory · no passage citations`** badge so grounding honesty is never compromised.
+5. **Physical book scan / OCR (Phase 3):** Upload or snap photos of physical book pages to extract text for grounded Q&A.
 
 ### F7. Saved notes (Phase 2/3)
 - Save any Q&A pair with its citations. Add a personal note. Filter by book.
@@ -502,18 +504,42 @@ Levers: cache the persona block, use a smaller model for easy questions, cap his
 
 **Exit:** eval targets met for recall, citations, and zero spoiler leaks. Five friends try it and understand it without explanation.
 
-### Phase 2: Uploads, full citations, spoiler UX (≈ 2–3 weeks)
+### Phase 2: Uploads, zero-file acquisition, full citations, spoiler UX (≈ 2–3 weeks)
+- [ ] **Library Search & One-Click Public-Domain Import:** `GET /api/books/search` (Gutendex + Open Library + existing catalog) and `POST /api/books/import` (fetch EPUB/TXT, deduplicate by `external_id`, run ingest pipeline) directly inside `LibraryPage`
+- [ ] **Paste Text / Web URL ingest:** `POST /api/books/from-text` for excerpts, chapters, and web essays
+- [ ] **Title & Author (no-file mode):** Allow creating a `no_file` book entry with `AI memory · no passage citations` badge when no digital copy is available
 - [ ] Upload flow (signed URL), ownership checkbox, file validation
 - [ ] Background ingest jobs (Inngest/Trigger.dev) + progress UI
 - [ ] PDF parsing with page numbers. EPUB TOC chapters.
-- [ ] Auto-generated persona + starter questions. Guide vs. author mode rules.
+- [ ] Auto-generated persona + starter questions (always in first-person author perspective).
 - [ ] Citation drawer + "open in context" view
 - [ ] Polished spoiler slider. "Answered later, raise limit?" flow.
 - [ ] Reranking, query rewriting, quote verification
 - [ ] Rate limiting, RLS, quote-length caps
 - [ ] Seed 10–20 public-domain books
 
-**Exit:** a user can upload an EPUB and chat with correct citations within about 2 minutes.
+**Exit:** a user can search for a classic book, paste text, enter a title/author, or upload an EPUB and start chatting within 1–2 minutes without hunting for files externally.
+
+---
+
+## 12.1 Zero-File Book Acquisition Implementation Plan
+
+### UX inside the Library Page (`"Choose a book"`)
+Replace the single upload dropzone with a compact tabbed switcher inside `LibraryPage`:
+- **Find a Book (Default):** Search input querying both our Supabase catalog and public-domain APIs (Gutendex / Open Library). Results show cover/color, title, author, and either **Open** (already ingested) or **Import & Chat** (fetches and ingests on demand with live progress).
+- **Upload File:** Existing EPUB / PDF / TXT drag-and-drop uploader.
+- **Paste Text / URL:** Textarea for pasting chapters/excerpts or a URL input for public web essays.
+- **Title & Author (No File):** Two-field form (`Book Title`, `Author Name`) for copyrighted/physical books when no file is available.
+
+### Backend & Schema Changes
+1. **Schema migration (`0003_book_acquisition.sql`):**
+   - Extend `books.source` check constraint to allow `'public_domain' | 'upload' | 'text_paste' | 'no_file'`.
+   - Add `external_id text unique` (e.g. `gutenberg:1342`) so imported public-domain books are ingested once and shared across all users.
+2. **API routes:**
+   - `GET /api/books/search?q=...`: Searches local `books` table first, then queries `https://gutendex.com/books?search=...` (filtering for entries with `text/plain` or `application/epub+zip` formats).
+   - `POST /api/books/import`: Checks if `external_id` already exists in `books` with `status = 'ready'`; if not, downloads the EPUB/TXT server-side, runs `parseBookBuffer` → `chunkChapters` → `embedTexts` → inserts `chapters`, `chunks`, and `personas` (`persona_mode: "author"`).
+   - `POST /api/books/from-text`: Accepts `{ title, author, text | url }`, extracts text (using `cheerio` if URL), and runs the same chunk + embed pipeline.
+   - `POST /api/books/no-file`: Creates a `books` row with `source: 'no_file'`, `status: 'ready'`, `persona_mode: 'author'`. In `/api/chat`, when `book.source === 'no_file'`, skip vector retrieval and instruct the model to answer in the author's first-person voice using its literary knowledge with mode badge `"memory"` (`AI memory · no passage citations`).
 
 ### Phase 3: Accounts & social (≈ 3–4 weeks)
 - [ ] Supabase Auth (email magic link + Google)

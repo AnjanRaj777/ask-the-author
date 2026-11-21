@@ -289,21 +289,25 @@ function BookScene({
     ? { left: W, top: 0, width: W, height: H }
     : { left: 0, top: H, width: W, height: H };
 
-  // Soft curved-page lighting + rich center gutter shadow
+  // Deep center binding crease + warm sunlit page arch + subtle aged edge vignette
   const gutterFirst = horizontal
-    ? "linear-gradient(to left, rgba(58,38,20,0.22) 0%, rgba(58,38,20,0.06) 9%, rgba(255,255,255,0.25) 28%, transparent 55%)"
-    : "linear-gradient(to top, rgba(58,38,20,0.22) 0%, rgba(58,38,20,0.06) 9%, rgba(255,255,255,0.25) 28%, transparent 55%)";
+    ? "linear-gradient(to left, rgba(34,18,8,0.44) 0%, rgba(44,24,12,0.2) 4%, rgba(58,38,20,0.06) 11%, rgba(255,250,240,0.42) 28%, rgba(255,248,236,0.12) 60%, rgba(112,86,58,0.12) 100%)"
+    : "linear-gradient(to top, rgba(34,18,8,0.44) 0%, rgba(44,24,12,0.2) 4%, rgba(58,38,20,0.06) 11%, rgba(255,250,240,0.42) 28%, rgba(112,86,58,0.12) 100%)";
   const gutterSecond = horizontal
-    ? "linear-gradient(to right, rgba(58,38,20,0.22) 0%, rgba(58,38,20,0.06) 9%, rgba(255,255,255,0.25) 28%, transparent 55%)"
-    : "linear-gradient(to bottom, rgba(58,38,20,0.22) 0%, rgba(58,38,20,0.06) 9%, rgba(255,255,255,0.25) 28%, transparent 55%)";
+    ? "linear-gradient(to right, rgba(34,18,8,0.44) 0%, rgba(44,24,12,0.2) 4%, rgba(58,38,20,0.06) 11%, rgba(255,250,240,0.42) 28%, rgba(255,248,236,0.12) 60%, rgba(112,86,58,0.12) 100%)"
+    : "linear-gradient(to bottom, rgba(34,18,8,0.44) 0%, rgba(44,24,12,0.2) 4%, rgba(58,38,20,0.06) 11%, rgba(255,250,240,0.42) 28%, rgba(112,86,58,0.12) 100%)";
 
-  const firstRadius = horizontal ? "rounded-l-md" : "rounded-t-md";
-  const secondRadius = horizontal ? "rounded-r-md" : "rounded-b-md";
+  const firstRadius = horizontal
+    ? "rounded-l-[3px] rounded-tr-[22px_8px] rounded-br-[22px_8px]"
+    : "rounded-t-[3px] rounded-bl-[22px_8px] rounded-br-[22px_8px]";
+  const secondRadius = horizontal
+    ? "rounded-r-[3px] rounded-tl-[22px_8px] rounded-bl-[22px_8px]"
+    : "rounded-b-[3px] rounded-tl-[22px_8px] rounded-tr-[22px_8px]";
   const titleSize = Math.round(Math.min(W, H) * 0.14);
 
   return (
     <motion.div
-      className="absolute left-1/2 top-1/2 z-10"
+      className="book-paper-theme absolute left-1/2 top-1/2 z-10"
       style={{
         width: spreadW,
         height: spreadH,
@@ -314,29 +318,37 @@ function BookScene({
         rotate: tilt,
       }}
     >
-      {/* Linen hardcover board peeking out around the open spread */}
+      {/* Leather hardcover board extending beyond the open pages */}
       <motion.div
         aria-hidden
-        style={{ opacity: contentOpacity }}
-        className="pointer-events-none absolute -inset-x-3 -inset-y-2.5 rounded-lg border border-[#a89e8e] bg-[#bfb5a4] shadow-[0_32px_65px_-16px_rgba(24,14,8,0.65)]"
+        style={{
+          opacity: contentOpacity,
+          boxShadow:
+            "0 30px 60px rgba(0, 0, 0, 0.4), inset 0 0 20px rgba(0, 0, 0, 0.8)",
+        }}
+        className="pointer-events-none absolute -inset-x-5 -bottom-6 -top-4 rounded-[8px] bg-[#4a1515]"
       >
-        <div
-          className={`absolute ${
-            horizontal
-              ? "inset-y-0 left-1/2 w-6 -translate-x-1/2 bg-linear-to-r"
-              : "inset-x-0 top-1/2 h-6 -translate-y-1/2 bg-linear-to-b"
-          } from-black/15 via-black/30 to-black/15`}
-        />
+        {/* Gold bookmark ribbon tail peeking out below the center spine */}
+        {horizontal && (
+          <div
+            className="absolute -bottom-5 left-1/2 h-7 w-4 -translate-x-1/2 drop-shadow-[0_4px_6px_rgba(0,0,0,0.55)]"
+            style={{
+              background:
+                "repeating-linear-gradient(90deg, rgba(255,255,255,0.06) 0 1px, transparent 1px 2px), linear-gradient(135deg, #f5e2a8 0%, #c89d47 55%, #8f6720 100%)",
+              clipPath: "polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%)",
+            }}
+          />
+        )}
       </motion.div>
 
       {/* 3D layer: page block + swinging cover */}
       <div className="absolute inset-0" style={{ perspective: 2400 }}>
         <div
-          className={`page-paper page-block-right absolute overflow-hidden ${secondRadius}`}
+          className="page-paper book-page-right absolute overflow-hidden"
           style={second}
         >
           <motion.div
-            className={`absolute inset-0 ${
+            className={`absolute inset-0 overflow-hidden rounded-[inherit] ${
               horizontal ? "bg-linear-to-r" : "bg-linear-to-b"
             } from-black/60 to-transparent`}
             style={{ opacity: foldShade }}
@@ -367,39 +379,49 @@ function BookScene({
 
       {/* Content layer (2D, on top of the open spread) */}
       <motion.div
-        className={`page-paper page-block-left absolute z-10 overflow-hidden ${firstRadius} ${
+        className={`book-page-left absolute z-10 overflow-hidden ${
           interactive ? "" : "pointer-events-none"
         }`}
         style={{
           ...first,
           opacity: contentOpacity,
-          backgroundImage: `${gutterFirst}, var(--noise)`,
         }}
         aria-hidden={!interactive}
         inert={!interactive}
       >
-        <LibraryPage selected={selected} onSelect={onSelect} />
+        <div className="relative z-10 h-full w-full">
+          <LibraryPage selected={selected} onSelect={onSelect} />
+        </div>
       </motion.div>
 
       <motion.div
         ref={secondPageRef}
-        className={`page-paper page-block-right absolute z-10 overflow-hidden ${secondRadius} ${
+        className={`book-page-right absolute z-10 overflow-hidden ${
           interactive ? "" : "pointer-events-none"
         }`}
         style={{
           ...second,
           opacity: contentOpacity,
-          backgroundImage: `${gutterSecond}, var(--noise)`,
         }}
         aria-hidden={!interactive}
         inert={!interactive}
       >
-        <DisclaimerPage
-          key={selected?.id ?? "none"}
-          book={selected}
-          onAccept={onAccept}
-        />
+        <div className="relative z-10 h-full w-full">
+          <DisclaimerPage
+            key={selected?.id ?? "none"}
+            book={selected}
+            onAccept={onAccept}
+          />
+        </div>
       </motion.div>
+
+      {horizontal && (
+        <motion.div
+          aria-hidden
+          style={{ opacity: contentOpacity }}
+          className="spine-crease"
+        />
+      )}
     </motion.div>
   );
 }
