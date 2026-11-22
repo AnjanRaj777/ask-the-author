@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import {
+  ArrowDown,
+  ArrowRight,
   CircleHelp,
   Quote,
   Sparkles,
@@ -98,13 +100,23 @@ export function DisclaimerPage({
         </label>
       )}
 
+      {canContinue && (
+        <div className="mt-3 flex flex-col items-center gap-1 text-leather" aria-hidden>
+          <span className="text-[11px] font-medium uppercase tracking-[0.18em]">
+            Ready to continue
+          </span>
+          <ArrowDown className="h-5 w-5 animate-bounce" />
+        </div>
+      )}
+
       <button
         type="button"
         disabled={!canContinue}
         onClick={onAccept}
-        className="mt-4 rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-paper transition hover:bg-leather focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leather/50 focus-visible:ring-offset-2 focus-visible:ring-offset-page disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-ink"
+        className="mt-2 inline-flex items-center justify-center gap-2 rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-paper transition hover:bg-leather focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leather/50 focus-visible:ring-offset-2 focus-visible:ring-offset-page disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-ink"
       >
-        {book ? "I understand, open the chat" : "Choose a book to continue"}
+        <span>{book ? "I understand, open the chat" : "Choose a book to continue"}</span>
+        {canContinue && <ArrowRight className="h-4 w-4" aria-hidden />}
       </button>
     </div>
   );
