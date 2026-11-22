@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_CHAT_MODEL, getMuseClient } from "@/lib/ai/muse";
 import { buildNoFileSystemPrompt, buildSystemPrompt } from "@/lib/ai/prompts";
+import { getCurrentUser } from "@/lib/db/auth";
 import { getSupabaseServerClient } from "@/lib/db/supabase";
+import {
+  checkAndConsumeGuestQuota,
+  GUEST_COOKIE_NAME,
+} from "@/lib/guestLimit";
 import { retrieveChunks } from "@/lib/rag/retrieve";
 import { rewriteFollowUpQuery } from "@/lib/rag/rewrite";
 import { validateAnswer } from "@/lib/rag/validate";
@@ -43,6 +48,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "bookId and question are required." },
       { status: 400 }
+    );
+  }
+
+  const user = await getCurrentUser();
+  const guestQuota = user ? null : checkAndConsumeGuestQuota(req);
+  if (guestQuota && !guestQuota.allowed) {
+    return NextResponse.json(
+      {
+        error: `Guest limit reached (${guestQuota.limit} free questions per day). Sign in to continue chatting.`,
+        code: "GUEST_LIMIT_REACHED",
+        limit: guestQuota.limit,
+        remaining: 0,
+      },
+      {
+        status: 429,
+        headers: {
+          "X-Guest-Limit": String(guestQuota.limit),
+          "X-Guest-Remaining": "0",
+        },
+      }
     );
   }
 
@@ -274,11 +299,26 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    },
-  });
+  const headers: Record<string, string> = {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+  };
+  if (guestQuota) {
+    headers["X-Guest-Limit"] = String(guestQuota.limit);
+    headers["X-Guest-Remaining"] = String(guestQuota.remaining);
+    const maxAge = Math.max(
+      60,
+      Math.floor((guestQuota.resetAt - Date.now()) / 1000)
+    );
+    const cookieVal = encodeURIComponent(
+      JSON.stringify({
+        count: guestQuota.nextCount,
+        resetAt: guestQuota.resetAt,
+      })
+    );
+    headers["Set-Cookie"] = `${GUEST_COOKIE_NAME}=${cookieVal}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+  }
+
+  return new Response(stream, { headers });
 }

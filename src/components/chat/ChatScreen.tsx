@@ -72,6 +72,8 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
   const [readTo, setReadTo] = useState(1);
   const [userId, setUserId] = useState("");
   const [authEmail, setAuthEmail] = useState<string | null>(null);
+  const [guestRemaining, setGuestRemaining] = useState<number | null>(null);
+  const [guestLimit, setGuestLimit] = useState<number | null>(null);
   const [userChats, setUserChats] = useState<SavedBookChat[]>([]);
   const [drawerCitation, setDrawerCitation] = useState<DisplayCitation | null>(
     null
@@ -252,11 +254,22 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
         }),
       });
 
+      const hdrRem = res.headers.get("X-Guest-Remaining");
+      const hdrLim = res.headers.get("X-Guest-Limit");
+      if (hdrRem !== null) setGuestRemaining(Number(hdrRem));
+      if (hdrLim !== null) setGuestLimit(Number(hdrLim));
+
       if (!res.ok || !res.body) {
         let errMsg = `Request failed (${res.status}).`;
         try {
-          const json = (await res.json()) as { error?: string };
+          const json = (await res.json()) as {
+            error?: string;
+            remaining?: number;
+            limit?: number;
+          };
           if (json.error) errMsg = json.error;
+          if (typeof json.remaining === "number") setGuestRemaining(json.remaining);
+          if (typeof json.limit === "number") setGuestLimit(json.limit);
         } catch {
           // ignore JSON parse error
         }
@@ -331,13 +344,14 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
   };
 
   const isEmpty = messages.length === 0;
+  const guestExhausted = !authEmail && guestRemaining === 0;
   const composer = (
     <Composer
       book={book}
       readTo={readTo}
       onReadToChange={setReadTo}
       onSend={sendQuestion}
-      disabled={pending}
+      disabled={pending || guestExhausted}
       autoFocus
     />
   );
@@ -484,7 +498,24 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
             </div>
           </main>
           <div className="px-4">
-            <div className="mx-auto max-w-2xl">{composer}</div>
+            <div className="mx-auto max-w-2xl">
+              {!authEmail && guestRemaining !== null && guestLimit !== null && (
+                <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-ink/10 bg-page/75 px-3 py-1.5 text-[11px] text-ink-soft">
+                  <span>
+                    {guestRemaining === 0
+                      ? `Guest limit reached (${guestLimit} free questions).`
+                      : `Guest mode: ${guestRemaining} of ${guestLimit} free questions left`}
+                  </span>
+                  <Link
+                    href={`/login?next=/chat/${book.id}`}
+                    className="font-medium text-leather underline underline-offset-2 hover:opacity-80"
+                  >
+                    {guestRemaining === 0 ? "Sign in to continue" : "Sign in for unlimited"}
+                  </Link>
+                </div>
+              )}
+              {composer}
+            </div>
           </div>
         </>
       )}

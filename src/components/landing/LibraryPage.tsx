@@ -10,7 +10,12 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
-import { CATALOG, toSelectedBook, type SelectedBook } from "@/lib/catalog";
+import {
+  CATALOG,
+  toSelectedBook,
+  type CatalogBook,
+  type SelectedBook,
+} from "@/lib/catalog";
 import type { BookSearchResult } from "@/app/api/books/search/route";
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -279,6 +284,46 @@ export function LibraryPage({
     }
   }
 
+  async function handleSelectPreset(b: CatalogBook) {
+    if (!b.noFilePreset) {
+      onSelect(toSelectedBook(b));
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    setStatusMsg(`Opening "${b.title}"…`);
+    try {
+      const res = await fetch("/api/books/no-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: b.title, author: b.author }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        bookId?: string;
+        title?: string;
+        author?: string;
+        personaName?: string;
+      };
+      if (!res.ok || !data.bookId) {
+        setError(data.error || "Failed to open preset book.");
+        return;
+      }
+      onSelect({
+        kind: "upload",
+        id: data.bookId,
+        title: data.title || b.title,
+        author: data.author || b.author,
+        personaName: data.personaName || b.personaName,
+      });
+    } catch {
+      setError("Network error while opening book.");
+    } finally {
+      setBusy(false);
+      setStatusMsg(null);
+    }
+  }
+
   const tabs: Array<{ id: LibraryTab; label: string; Icon: typeof Search }> = [
     { id: "no_file", label: "By Title", Icon: Sparkles },
     { id: "find", label: "Library", Icon: BookOpen },
@@ -402,7 +447,7 @@ export function LibraryPage({
                     <button
                       type="button"
                       disabled={!b.available || busy}
-                      onClick={() => onSelect(toSelectedBook(b))}
+                      onClick={() => handleSelectPreset(b)}
                       className={`group flex w-full items-center gap-3 rounded-lg border p-2 text-left transition focus-visible:border-ink/30 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:border-transparent disabled:hover:bg-transparent ${
                         isSelected
                           ? "border-leather/30 bg-page shadow-xs"
