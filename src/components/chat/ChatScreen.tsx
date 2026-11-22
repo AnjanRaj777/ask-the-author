@@ -22,13 +22,10 @@ import {
   ThumbsUp,
   User,
   Users,
-  Volume2,
-  VolumeX,
   X,
 } from "lucide-react";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { createSupabaseBrowserAuthClient } from "@/lib/db/supabase";
-import { speakNatural, stopTts, type TtsState } from "@/lib/voice/kokoroTts";
 import {
   UPLOAD_STORAGE_KEY,
   uploadToChatBook,
@@ -733,7 +730,6 @@ function AssistantMessage({
   const [savingNote, setSavingNote] = useState(false);
   const [rating, setRating] = useState<1 | -1 | null>(null);
   const [reasonPicker, setReasonPicker] = useState(false);
-  const [ttsState, setTtsState] = useState<TtsState>("idle");
   const active = message.citations?.find((c) => c.n === openCitation);
 
   const handleSaveNote = async () => {
@@ -770,15 +766,6 @@ function AssistantMessage({
         reason,
       }),
     }).catch(() => null);
-  };
-
-  const toggleSpeak = () => {
-    if (ttsState !== "idle") {
-      stopTts();
-      setTtsState("idle");
-      return;
-    }
-    void speakNatural(message.content, setTtsState);
   };
 
   return (
@@ -870,27 +857,6 @@ function AssistantMessage({
           >
             <Bookmark className="h-3.5 w-3.5" />
             {savedNote ? "Saved" : savingNote ? "Saving…" : "Save note"}
-          </button>
-          <button
-            type="button"
-            onClick={toggleSpeak}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 transition hover:bg-ink/5 hover:text-ink"
-          >
-            {ttsState !== "idle" ? (
-              <>
-                <VolumeX className="h-3.5 w-3.5 text-leather" />
-                {ttsState === "loading"
-                  ? "Loading voice…"
-                  : ttsState === "synthesizing"
-                    ? "Speaking…"
-                    : "Stop"}
-              </>
-            ) : (
-              <>
-                <Volume2 className="h-3.5 w-3.5" />
-                Listen
-              </>
-            )}
           </button>
           <button
             type="button"
