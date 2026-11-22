@@ -12,11 +12,18 @@ import {
   Check,
   Copy,
   Library,
+  Mic,
+  MicOff,
   PanelLeft,
   PanelLeftClose,
   Settings,
   SquarePen,
+  ThumbsDown,
+  ThumbsUp,
   User,
+  Users,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { SettingsModal } from "@/components/settings/SettingsModal";
@@ -457,13 +464,19 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
             className="quiet-scroll flex-1 overflow-y-auto px-4"
           >
             <div className="mx-auto max-w-2xl space-y-7 py-6">
-              {messages.map((m) =>
+              {messages.map((m, idx) =>
                 m.role === "user" ? (
                   <UserBubble key={m.id} text={m.content} />
                 ) : (
                   <AssistantMessage
                     key={m.id}
+                    bookId={book.id}
                     message={m}
+                    previousQuestion={
+                      idx > 0 && messages[idx - 1]?.role === "user"
+                        ? messages[idx - 1].content
+                        : ""
+                    }
                     personaName={book.personaName}
                     onOpenContext={setDrawerCitation}
                   />
@@ -518,7 +531,54 @@ function Composer({
 }) {
   const [value, setValue] = useState("");
   const [progressOpen, setProgressOpen] = useState(false);
+  const [listening, setListening] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
+
+  const toggleVoiceInput = () => {
+    if (listening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setListening(false);
+      return;
+    }
+    const win = window as unknown as {
+      SpeechRecognition?: new () => {
+        lang: string;
+        interimResults: boolean;
+        onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+        onerror: (() => void) | null;
+        onend: (() => void) | null;
+        start: () => void;
+        stop: () => void;
+      };
+      webkitSpeechRecognition?: new () => {
+        lang: string;
+        interimResults: boolean;
+        onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+        onerror: (() => void) | null;
+        onend: (() => void) | null;
+        start: () => void;
+        stop: () => void;
+      };
+    };
+    const SpeechRec = win.SpeechRecognition || win.webkitSpeechRecognition;
+    if (!SpeechRec) return;
+
+    const rec = new SpeechRec();
+    rec.lang = "en-US";
+    rec.interimResults = false;
+    rec.onresult = (event) => {
+      const transcript = event.results?.[0]?.[0]?.transcript ?? "";
+      if (transcript) {
+        setValue((prev) => (prev ? `${prev} ${transcript}` : transcript));
+      }
+    };
+    rec.onerror = () => setListening(false);
+    rec.onend = () => setListening(false);
+    recognitionRef.current = rec;
+    setListening(true);
+    rec.start();
+  };
 
   useEffect(() => {
     const el = ref.current;
@@ -619,6 +679,19 @@ function Composer({
           className="max-h-[200px] min-w-0 flex-1 resize-none bg-transparent py-2 text-[15px] leading-6 text-ink placeholder:text-ink-soft/70 focus:outline-none"
         />
         <button
+          type="button"
+          onClick={toggleVoiceInput}
+          aria-label={listening ? "Stop voice input" : "Voice input"}
+          title={listening ? "Stop listening" : "Speak your question"}
+          className={`grid h-10 w-10 shrink-0 place-items-center rounded-full transition ${
+            listening
+              ? "bg-red-600 text-white"
+              : "text-ink-soft hover:bg-ink/5 hover:text-ink"
+          }`}
+        >
+          {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+        </button>
+        <button
           type="submit"
           disabled={!value.trim() || disabled}
           aria-label="Send"
@@ -642,16 +715,84 @@ function UserBubble({ text }: { text: string }) {
 }
 
 function AssistantMessage({
+  bookId,
   message,
+  previousQuestion,
   personaName,
   onOpenContext,
 }: {
+  bookId: string;
   message: Message;
+  previousQuestion: string;
   personaName: string;
   onOpenContext: (citation: DisplayCitation) => void;
 }) {
   const [openCitation, setOpenCitation] = useState<number | null>(null);
+  const [savedNote, setSavedNote] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
+  const [rating, setRating] = useState<1 | -1 | null>(null);
+  const [reasonPicker, setReasonPicker] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const active = message.citations?.find((c) => c.n === openCitation);
+
+  const handleSaveNote = async () => {
+    if (savingNote || savedNote) return;
+    setSavingNote(true);
+    const res = await fetch("/api/notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bookId,
+        messageId: message.id,
+        question: previousQuestion,
+        answer: message.content,
+        answerMode: message.mode,
+        citations: message.citations ?? [],
+      }),
+    }).catch(() => null);
+    setSavingNote(false);
+    if (res?.ok) setSavedNote(true);
+  };
+
+  const submitFeedback = async (nextRating: 1 | -1, reason?: string) => {
+    setRating(nextRating);
+    setReasonPicker(false);
+    await fetch("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bookId,
+        messageId: message.id,
+        question: previousQuestion,
+        answer: message.content,
+        rating: nextRating,
+        reason,
+      }),
+    }).catch(() => null);
+  };
+
+  const toggleSpeak = () => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(
+      message.content.replace(/\[\d+\]/g, "")
+    );
+    const voices = window.speechSynthesis.getVoices();
+    const standardVoice =
+      voices.find((v) => v.lang.startsWith("en") && v.localService) ||
+      voices.find((v) => v.lang.startsWith("en"));
+    if (standardVoice) utterance.voice = standardVoice;
+    utterance.rate = 1;
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    setSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
 
   return (
     <motion.div
@@ -732,6 +873,75 @@ function AssistantMessage({
           </motion.blockquote>
         )}
       </AnimatePresence>
+      {!message.error && message.content && (
+        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-ink-soft">
+          <button
+            type="button"
+            onClick={handleSaveNote}
+            disabled={savingNote || savedNote}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 transition hover:bg-ink/5 hover:text-ink disabled:opacity-70"
+          >
+            <Bookmark className="h-3.5 w-3.5" />
+            {savedNote ? "Saved" : savingNote ? "Saving…" : "Save note"}
+          </button>
+          <button
+            type="button"
+            onClick={toggleSpeak}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 transition hover:bg-ink/5 hover:text-ink"
+          >
+            {speaking ? (
+              <>
+                <VolumeX className="h-3.5 w-3.5 text-leather" />
+                Stop
+              </>
+            ) : (
+              <>
+                <Volume2 className="h-3.5 w-3.5" />
+                Listen
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => submitFeedback(1)}
+            aria-label="Helpful"
+            className={`rounded-md p-1 transition hover:bg-ink/5 ${
+              rating === 1 ? "text-emerald-700" : "text-ink-soft hover:text-ink"
+            }`}
+          >
+            <ThumbsUp className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setReasonPicker((v) => !v)}
+            aria-label="Needs improvement"
+            className={`rounded-md p-1 transition hover:bg-ink/5 ${
+              rating === -1 ? "text-rose-700" : "text-ink-soft hover:text-ink"
+            }`}
+          >
+            <ThumbsDown className="h-3.5 w-3.5" />
+          </button>
+          {reasonPicker && (
+            <div className="flex flex-wrap items-center gap-1 pl-1">
+              {[
+                { key: "wrong", label: "Wrong" },
+                { key: "spoiler", label: "Spoiler" },
+                { key: "bad_citation", label: "Bad citation" },
+                { key: "off_voice", label: "Off voice" },
+              ].map((r) => (
+                <button
+                  key={r.key}
+                  type="button"
+                  onClick={() => submitFeedback(-1, r.key)}
+                  className="rounded-full border border-ink/15 bg-page px-2 py-0.5 text-[10px] text-ink hover:border-leather"
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -855,12 +1065,12 @@ function Sidebar({
               <button type="button" onClick={onOpenSettings} className={item}>
                 <Settings className="h-4 w-4" /> Settings
               </button>
-              <span className={`${item} cursor-default opacity-50 hover:bg-transparent`}>
+              <Link href="/notes" onClick={onClose} className={item}>
                 <Bookmark className="h-4 w-4" /> Saved notes
-                <span className="ml-auto text-[10px] uppercase tracking-wider">
-                  Soon
-                </span>
-              </span>
+              </Link>
+              <Link href="/clubs" onClick={onClose} className={item}>
+                <Users className="h-4 w-4" /> Book clubs
+              </Link>
             </nav>
 
             <div className="mt-5 rounded-xl border border-ink/10 bg-page/65 p-2.5">
