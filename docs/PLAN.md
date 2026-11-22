@@ -542,11 +542,41 @@ Replace the single upload dropzone with a compact tabbed switcher inside `Librar
    - `POST /api/books/no-file`: Creates a `books` row with `source: 'no_file'`, `status: 'ready'`, `persona_mode: 'author'`. In `/api/chat`, when `book.source === 'no_file'`, skip vector retrieval and instruct the model to answer in the author's first-person voice using its literary knowledge with mode badge `"memory"` (`AI memory · no passage citations`).
 
 ### Phase 3: Accounts & social (≈ 3–4 weeks)
-- [ ] Supabase Auth (email magic link + Google)
+- [ ] Supabase Auth (email + password, email magic link, and Google OAuth)
 - [ ] Saved conversations, saved notes, Markdown/PDF export
 - [ ] Feedback 👍/👎 + admin review page
 - [ ] Voice mode (browser speech-to-text in; TTS out with a non-celebrity voice)
 - [ ] Book clubs: shared room, invite link, per-member spoiler limit (each member's retrieval is filtered by *their own* limit)
+
+---
+
+## 12.2 Account Sign Up & Sign In Implementation Plan
+
+### 1. Auth Architecture (Supabase Auth + `@supabase/ssr`)
+- **Packages:** Install `@supabase/ssr` alongside `@supabase/supabase-js` for cookie-based server & middleware sessions in Next.js App Router.
+- **Session helper (`src/lib/db/auth.ts`):**
+  - `createSupabaseServerClient()` (reads/writes `cookies()` for Server Components and Route Handlers).
+  - `getCurrentUser()` helper returning the authenticated `User | null` without throwing.
+- **Middleware (`src/middleware.ts`):** Refresh Supabase auth session cookies on navigation so sessions stay valid without client flicker.
+
+### 2. Sign Up, Sign In & Callback Flows
+- **`/login` (`LoginClient.tsx`):**
+  - **Mode toggle:** `Sign in` / `Create account` tabs.
+  - **Email + Password:** `supabase.auth.signUp({ email, password, options: { emailRedirectTo } })` and `supabase.auth.signInWithPassword({ email, password })`.
+  - **Magic Link:** Passwordless `supabase.auth.signInWithOtp({ email, options: { emailRedirectTo } })`.
+  - **Google OAuth:** `supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } })`.
+  - **Password Reset:** "Forgot password?" link calling `supabase.auth.resetPasswordForEmail(...)` -> `/auth/reset-password`.
+  - **Guest User ID fallback:** Keep "Continue as guest" using the existing `ata:user-id` local ID so zero-friction exploration still works.
+- **`/auth/callback/route.ts`:** Handles PKCE `?code=` exchange (`supabase.auth.exchangeCodeForSession(code)`) and redirects to `/#library` (or `next` query param).
+
+### 3. Migrating Guest Chat History & Cloud Sync
+- **Database persistence (`conversations` + `messages`):**
+  - When signed in, `/api/chat` and `ChatScreen` read/write conversations in Supabase (`conversations.user_id = auth.uid()`) instead of only `localStorage`.
+  - **Guest → Account migration:** On first sign-in, check `localStorage` for `ata:chats:<guestId>`. Call `POST /api/auth/migrate-guest` to import existing local chat books into `conversations` and `messages` under the new `auth.uid()` so no history is lost.
+- **Row-Level Security (`supabase/migrations/0004_auth_rls.sql`):**
+  - Enable RLS on `books` (public when `owner_id is null`, private when `owner_id = auth.uid()`), `conversations`, `messages`, `saved_notes`, and `feedback` so users can only access their own data.
+- **UI integration:**
+  - Show signed-in user's email/avatar and a **Sign out** action in the `ChatScreen` sidebar (replacing the guest User ID switcher when authenticated).
 
 ### Phase 4: Growth ideas (backlog)
 Multi-book comparisons ("How do Austen and Brontë treat marriage?"), study mode (quizzes from read chapters), a reading companion that sends daily questions, mobile app (PWA first), and multilingual books.

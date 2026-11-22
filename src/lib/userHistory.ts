@@ -61,9 +61,15 @@ export function loadUserChats(userId: string): SavedBookChat[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return (parsed as SavedBookChat[])
+    const sorted = (parsed as SavedBookChat[])
       .filter((c) => c && typeof c.bookId === "string" && Array.isArray(c.messages))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const seen = new Set<string>();
+    return sorted.filter((c) => {
+      if (seen.has(c.bookId)) return false;
+      seen.add(c.bookId);
+      return true;
+    });
   } catch {
     return [];
   }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowUp,
@@ -19,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { SettingsModal } from "@/components/settings/SettingsModal";
+import { createSupabaseBrowserAuthClient } from "@/lib/db/supabase";
 import {
   UPLOAD_STORAGE_KEY,
   uploadToChatBook,
@@ -54,29 +56,54 @@ interface Message {
 
 /** Step 8: the main chat screen. */
 export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
+  const router = useRouter();
   const [book, setBook] = useState<ChatBook | null>(initialBook);
   const [missing, setMissing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [zoomingOut, setZoomingOut] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [pending, setPending] = useState(false);
   const [readTo, setReadTo] = useState(1);
   const [userId, setUserId] = useState("");
+  const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [userChats, setUserChats] = useState<SavedBookChat[]>([]);
   const [drawerCitation, setDrawerCitation] = useState<DisplayCitation | null>(
     null
   );
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Initialize userId and restore previous chat for this book.
+  // Initialize guest userId or authenticated Supabase account + restore chat books.
   useEffect(() => {
     const uid = getOrCreateUserId();
     setUserId(uid);
-    setUserChats(loadUserChats(uid));
-  }, []);
+    const localChats = loadUserChats(uid);
+    setUserChats(localChats);
+
+    const supabase = createSupabaseBrowserAuthClient();
+    if (!supabase) return;
+
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return;
+      setAuthEmail(user.email ?? "Signed-in account");
+      const res = await fetch("/api/conversations").catch(() => null);
+      if (!res?.ok) return;
+      const data = (await res.json()) as { chats?: SavedBookChat[] };
+      if (Array.isArray(data.chats)) {
+        setUserChats(data.chats);
+        if (book) {
+          const match = data.chats.find((c) => c.bookId === book.id);
+          if (match) {
+            setMessages(match.messages);
+            setReadTo(match.readTo || 1);
+          }
+        }
+      }
+    });
+  }, [book?.id]);
 
   useEffect(() => {
-    if (!userId || !book) return;
+    if (!userId || !book || authEmail) return;
     const saved = loadBookChat(userId, book.id);
     if (saved) {
       setMessages(saved.messages);
@@ -85,15 +112,23 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
       setMessages([]);
       setReadTo(1);
     }
-  }, [userId, book?.id]);
+  }, [userId, book?.id, authEmail]);
 
-  // Persist non-empty messages for the active userId and book.
+  // Persist non-empty messages for the active userId / authenticated account.
   useEffect(() => {
     if (!userId || !book || pending) return;
     const cleanMessages = messages.filter(
       (m) => !m.error && m.content.trim().length > 0
     );
     if (cleanMessages.length === 0) return;
+
+    const payloadMessages = cleanMessages.map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      mode: m.mode,
+      citations: m.citations,
+    }));
 
     const updated = saveBookChat(userId, {
       bookId: book.id,
@@ -105,16 +140,31 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
       chapterLabel: book.chapterLabel,
       readTo,
       updatedAt: new Date().toISOString(),
-      messages: cleanMessages.map((m) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        mode: m.mode,
-        citations: m.citations,
-      })),
+      messages: payloadMessages,
     });
-    setUserChats(updated);
-  }, [messages, readTo, pending, userId, book]);
+    if (!authEmail) {
+      setUserChats(updated);
+    } else {
+      fetch("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookId: book.id,
+          readTo,
+          messages: payloadMessages,
+        }),
+      })
+        .then(async (res) => {
+          if (!res.ok) return;
+          const listRes = await fetch("/api/conversations").catch(() => null);
+          if (listRes?.ok) {
+            const data = (await listRes.json()) as { chats?: SavedBookChat[] };
+            if (Array.isArray(data.chats)) setUserChats(data.chats);
+          }
+        })
+        .catch(() => null);
+    }
+  }, [messages, readTo, pending, userId, book, authEmail]);
 
   // Uploaded books are handed over from the landing page via sessionStorage.
   useEffect(() => {
@@ -293,17 +343,38 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
     setUserChats(loadUserChats(active));
   };
 
+  const handleNewChat = () => {
+    setSidebarOpen(false);
+    router.prefetch("/#library");
+    setZoomingOut(true);
+  };
+
   return (
-    <div className="flex h-svh overflow-hidden">
+    <motion.div
+      className="flex h-svh overflow-hidden bg-paper"
+      animate={
+        zoomingOut
+          ? { scale: 0.45, opacity: 0, borderRadius: 16 }
+          : { scale: 1, opacity: 1, borderRadius: 0 }
+      }
+      transition={{ duration: 0.36, ease: [0.4, 0, 0.2, 1] }}
+      onAnimationComplete={() => {
+        if (zoomingOut) router.push("/#library");
+      }}
+    >
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        onNewChat={() => {
-          setMessages([]);
-          setSidebarOpen(false);
-        }}
+        onNewChat={handleNewChat}
         userId={userId}
+        authEmail={authEmail}
         onSwitchUserId={handleSwitchUserId}
+        onSignOut={async () => {
+          const supabase = createSupabaseBrowserAuthClient();
+          if (supabase) await supabase.auth.signOut();
+          setAuthEmail(null);
+          setUserChats(loadUserChats(userId));
+        }}
         userChats={userChats}
         currentBookId={book.id}
         onOpenSettings={() => {
@@ -424,7 +495,7 @@ export function ChatScreen({ book: initialBook }: { book: ChatBook | null }) {
         onClose={() => setSettingsOpen(false)}
       />
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -690,7 +761,9 @@ function Sidebar({
   onClose,
   onNewChat,
   userId,
+  authEmail,
   onSwitchUserId,
+  onSignOut,
   userChats,
   currentBookId,
   onOpenSettings,
@@ -699,7 +772,9 @@ function Sidebar({
   onClose: () => void;
   onNewChat: () => void;
   userId: string;
+  authEmail: string | null;
   onSwitchUserId: (nextId: string) => void;
+  onSignOut: () => void;
   userChats: SavedBookChat[];
   currentBookId: string;
   onOpenSettings: () => void;
@@ -789,55 +864,77 @@ function Sidebar({
             </nav>
 
             <div className="mt-5 rounded-xl border border-ink/10 bg-page/65 p-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-ink-soft">
-                  <User className="h-3 w-3" /> User ID
-                </span>
-                <div className="flex items-center gap-1">
+              {authEmail ? (
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-ink-soft">
+                      <User className="h-3 w-3" /> Account
+                    </span>
+                    <p className="mt-0.5 truncate text-xs font-medium text-ink">
+                      {authEmail}
+                    </p>
+                  </div>
                   <button
                     type="button"
-                    onClick={copyId}
-                    aria-label="Copy User ID"
-                    className="rounded px-1.5 py-0.5 text-[11px] text-ink-soft hover:bg-ink/5 hover:text-ink"
+                    onClick={onSignOut}
+                    className="shrink-0 rounded px-2 py-1 text-[11px] font-medium text-leather hover:bg-leather/10"
                   >
-                    {copied ? (
-                      <Check className="h-3 w-3 text-leather" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDraftId(userId);
-                      setEditingId((v) => !v);
-                    }}
-                    className="rounded px-1.5 py-0.5 text-[11px] font-medium text-leather hover:bg-leather/10"
-                  >
-                    {editingId ? "Cancel" : "Switch"}
+                    Sign out
                   </button>
                 </div>
-              </div>
-              {editingId ? (
-                <form onSubmit={submitUserId} className="mt-2 flex gap-1.5">
-                  <input
-                    type="text"
-                    value={draftId}
-                    onChange={(e) => setDraftId(e.target.value)}
-                    placeholder="Enter user ID"
-                    className="min-w-0 flex-1 rounded-lg border border-ink/15 bg-page px-2 py-1 text-xs text-ink focus:border-leather focus:outline-none"
-                  />
-                  <button
-                    type="submit"
-                    className="rounded-lg bg-ink px-2.5 py-1 text-xs font-medium text-paper hover:bg-leather"
-                  >
-                    Save
-                  </button>
-                </form>
               ) : (
-                <p className="mt-1 truncate font-mono text-xs text-ink">
-                  {userId || "Loading…"}
-                </p>
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.16em] text-ink-soft">
+                      <User className="h-3 w-3" /> User ID
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={copyId}
+                        aria-label="Copy User ID"
+                        className="rounded px-1.5 py-0.5 text-[11px] text-ink-soft hover:bg-ink/5 hover:text-ink"
+                      >
+                        {copied ? (
+                          <Check className="h-3 w-3 text-leather" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDraftId(userId);
+                          setEditingId((v) => !v);
+                        }}
+                        className="rounded px-1.5 py-0.5 text-[11px] font-medium text-leather hover:bg-leather/10"
+                      >
+                        {editingId ? "Cancel" : "Switch"}
+                      </button>
+                    </div>
+                  </div>
+                  {editingId ? (
+                    <form onSubmit={submitUserId} className="mt-2 flex gap-1.5">
+                      <input
+                        type="text"
+                        value={draftId}
+                        onChange={(e) => setDraftId(e.target.value)}
+                        placeholder="Enter user ID"
+                        className="min-w-0 flex-1 rounded-lg border border-ink/15 bg-page px-2 py-1 text-xs text-ink focus:border-leather focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded-lg bg-ink px-2.5 py-1 text-xs font-medium text-paper hover:bg-leather"
+                      >
+                        Save
+                      </button>
+                    </form>
+                  ) : (
+                    <p className="mt-1 truncate font-mono text-xs text-ink">
+                      {userId || "Loading…"}
+                    </p>
+                  )}
+                </>
               )}
             </div>
 
@@ -851,11 +948,11 @@ function Sidebar({
                   conversation here.
                 </p>
               ) : (
-                userChats.map((chat) => {
+                userChats.map((chat, idx) => {
                   const isActive = chat.bookId === currentBookId;
                   return (
                     <Link
-                      key={chat.bookId}
+                      key={`${chat.bookId}-${idx}`}
                       href={`/chat/${chat.bookId}`}
                       onClick={onClose}
                       className={`block rounded-lg px-2.5 py-2 transition ${
@@ -881,7 +978,7 @@ function Sidebar({
               href="/login"
               className="mt-3 rounded-full bg-ink px-4 py-2.5 text-center text-sm font-medium text-paper transition hover:bg-leather"
             >
-              Manage User ID
+              {authEmail ? "Account & books" : "Sign in / Sign up"}
             </Link>
           </motion.aside>
         </>

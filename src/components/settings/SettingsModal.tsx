@@ -208,13 +208,13 @@ export function SettingsModal({
                   onClick={() =>
                     update({ paperTexture: !settings.paperTexture })
                   }
-                  className={`relative h-6 w-11 rounded-full transition ${
+                  className={`relative h-6 w-11 shrink-0 rounded-full transition ${
                     settings.paperTexture ? "bg-leather" : "bg-ink/20"
                   }`}
                 >
                   <span
-                    className={`block h-5 w-5 translate-y-0.5 rounded-full bg-page shadow transition ${
-                      settings.paperTexture ? "translate-x-5.5" : "translate-x-0.5"
+                    className={`absolute left-0.5 top-0.5 block h-5 w-5 rounded-full bg-page shadow transition-transform ${
+                      settings.paperTexture ? "translate-x-5" : "translate-x-0"
                     }`}
                   />
                 </button>

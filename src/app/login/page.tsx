@@ -1,6 +1,6 @@
 import { LoginClient } from "@/components/auth/LoginClient";
 
-export const metadata = { title: "User ID · Ask the Author" };
+export const metadata = { title: "Sign in · Ask the Author" };
 
 export default function LoginPage() {
   return (

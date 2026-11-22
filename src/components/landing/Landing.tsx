@@ -28,7 +28,7 @@ const HERO_OUT: [number, number] = [0, 0.07]; // Step 1 → fades away
 const DROP: [number, number] = [0.03, 0.3]; // Step 2–3: book drops in from the top
 const SLIDE: [number, number] = [0.32, 0.46]; // Step 4: book slides to make room
 const OPEN: [number, number] = [0.44, 0.7]; // Step 5: cover swings open
-const CONTENT: [number, number] = [0.66, 0.76]; // Step 6: pages fill in
+const CONTENT: [number, number] = [0.68, 0.72]; // Step 6: hand off to interactive 2D pages
 const BG_SHIFT: [number, number] = [0.15, 0.58]; // Step 1 linen → Step 6 wooden desk
 const INTERACTIVE_AT = 0.74;
 const SCROLL_HEIGHT = "460svh";
@@ -281,8 +281,9 @@ function BookScene({
     [0, 0.28, 0]
   );
 
-  // Step 6: page content fades in, along with the linen book-board backing.
+  // Step 6: hand off from 3D opening pages to interactive 2D pages.
   const contentOpacity = useTransform(progress, CONTENT, [0, 1]);
+  const previewOpacity = useTransform(progress, CONTENT, [1, 0]);
 
   const first = { left: 0, top: 0, width: W, height: H };
   const second = horizontal
@@ -326,13 +327,14 @@ function BookScene({
           boxShadow:
             "0 30px 60px rgba(0, 0, 0, 0.4), inset 0 0 20px rgba(0, 0, 0, 0.8)",
         }}
-        className="pointer-events-none absolute -inset-x-5 -bottom-6 -top-4 rounded-[8px] bg-[#4a1515]"
+        className="leather pointer-events-none absolute -inset-x-5 -bottom-6 -top-4 rounded-[8px] border border-leather-dark"
       >
         {/* Gold bookmark ribbon tail peeking out below the center spine */}
         {horizontal && (
           <div
-            className="absolute -bottom-5 left-1/2 h-7 w-4 -translate-x-1/2 drop-shadow-[0_4px_6px_rgba(0,0,0,0.55)]"
+            className="absolute -bottom-2.5 left-1/2 h-6 w-4 drop-shadow-[0_4px_6px_rgba(0,0,0,0.55)]"
             style={{
+              transform: "translateX(-50%)",
               background:
                 "repeating-linear-gradient(90deg, rgba(255,255,255,0.06) 0 1px, transparent 1px 2px), linear-gradient(135deg, #f5e2a8 0%, #c89d47 55%, #8f6720 100%)",
               clipPath: "polygon(0 0, 100% 0, 100% 100%, 50% 76%, 0 100%)",
@@ -348,7 +350,18 @@ function BookScene({
           style={second}
         >
           <motion.div
-            className={`absolute inset-0 overflow-hidden rounded-[inherit] ${
+            aria-hidden
+            className="pointer-events-none h-full w-full"
+            style={{ opacity: previewOpacity }}
+          >
+            <DisclaimerPage
+              key={selected?.id ?? "preview-none"}
+              book={selected}
+              onAccept={onAccept}
+            />
+          </motion.div>
+          <motion.div
+            className={`pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit] ${
               horizontal ? "bg-linear-to-r" : "bg-linear-to-b"
             } from-black/60 to-transparent`}
             style={{ opacity: foldShade }}
@@ -369,11 +382,19 @@ function BookScene({
             <BookCover orientation={orientation} titleSize={titleSize} />
           </div>
           <div
-            className={`page-paper backface-hidden absolute inset-0 ${secondRadius}`}
+            className="page-paper book-page-left backface-hidden absolute inset-0 overflow-hidden"
             style={{
               transform: horizontal ? "rotateY(180deg)" : "rotateX(180deg)",
             }}
-          />
+          >
+            <motion.div
+              aria-hidden
+              className="pointer-events-none h-full w-full"
+              style={{ opacity: previewOpacity }}
+            >
+              <LibraryPage selected={selected} onSelect={onSelect} />
+            </motion.div>
+          </div>
         </motion.div>
       </div>
 
@@ -464,7 +485,7 @@ function ExpandToChat({
         animate={{ opacity: 1 }}
         transition={{ delay: 0.4, duration: 0.3 }}
       >
-        <div className="h-14 w-full max-w-2xl rounded-3xl border border-ink/15 bg-white/80" />
+        <div className="h-14 w-full max-w-2xl rounded-3xl border border-ink/15 bg-page/90" />
       </motion.div>
     </motion.div>
   );

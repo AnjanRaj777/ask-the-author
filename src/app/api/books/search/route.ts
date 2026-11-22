@@ -84,11 +84,14 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 2. Search Project Gutenberg via Gutendex
+  // 2. Search Project Gutenberg via Gutendex (with a 5s timeout so slow responses don't hang)
   try {
     const res = await fetch(
       `https://gutendex.com/books?search=${encodeURIComponent(q)}`,
-      { next: { revalidate: 300 } }
+      {
+        signal: AbortSignal.timeout(5000),
+        next: { revalidate: 300 },
+      }
     );
     if (res.ok) {
       const data = (await res.json()) as { results?: GutendexBook[] };

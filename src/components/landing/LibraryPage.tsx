@@ -26,7 +26,7 @@ export function LibraryPage({
   selected: SelectedBook | null;
   onSelect: (book: SelectedBook) => void;
 }) {
-  const [tab, setTab] = useState<LibraryTab>("find");
+  const [tab, setTab] = useState<LibraryTab>("no_file");
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -280,10 +280,10 @@ export function LibraryPage({
   }
 
   const tabs: Array<{ id: LibraryTab; label: string; Icon: typeof Search }> = [
-    { id: "find", label: "Find", Icon: Search },
+    { id: "no_file", label: "By Title", Icon: Sparkles },
+    { id: "find", label: "Library", Icon: BookOpen },
     { id: "upload", label: "Upload", Icon: Upload },
     { id: "paste", label: "Paste / URL", Icon: FileText },
-    { id: "no_file", label: "No File", Icon: Sparkles },
   ];
 
   return (
@@ -333,7 +333,7 @@ export function LibraryPage({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search public-domain books by title or author…"
-              className="w-full rounded-full border border-ink/15 bg-page/80 py-2 pl-8 pr-3 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
+              className="w-full rounded-full border border-ink/10 bg-ink/[0.04] py-2 pl-8 pr-3 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
             />
           </div>
 
@@ -355,7 +355,7 @@ export function LibraryPage({
                     }}
                     className="font-medium text-leather underline underline-offset-2"
                   >
-                    No File
+                    By Title
                   </button>{" "}
                   tab to chat by title &amp; author.
                 </li>
@@ -512,28 +512,28 @@ export function LibraryPage({
             value={pasteTitle}
             onChange={(e) => setPasteTitle(e.target.value)}
             placeholder="Book or article title"
-            className="w-full rounded-lg border border-ink/15 bg-page/80 px-3 py-2 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
+            className="w-full rounded-lg border border-ink/10 bg-ink/[0.04] px-3 py-2 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
           />
           <input
             type="text"
             value={pasteAuthor}
             onChange={(e) => setPasteAuthor(e.target.value)}
             placeholder="Author name (optional)"
-            className="w-full rounded-lg border border-ink/15 bg-page/80 px-3 py-2 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
+            className="w-full rounded-lg border border-ink/10 bg-ink/[0.04] px-3 py-2 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
           />
           <input
             type="url"
             value={pasteUrl}
             onChange={(e) => setPasteUrl(e.target.value)}
             placeholder="Public article / essay URL (or paste text below)"
-            className="w-full rounded-lg border border-ink/15 bg-page/80 px-3 py-2 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
+            className="w-full rounded-lg border border-ink/10 bg-ink/[0.04] px-3 py-2 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
           />
           <textarea
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
             rows={4}
             placeholder="Or paste chapter text / excerpt here…"
-            className="w-full flex-1 resize-none rounded-lg border border-ink/15 bg-page/80 px-3 py-2 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
+            className="w-full flex-1 resize-none rounded-lg border border-ink/10 bg-ink/[0.04] px-3 py-2 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
           />
           <button
             type="submit"
@@ -560,7 +560,7 @@ export function LibraryPage({
             value={noFileTitle}
             onChange={(e) => setNoFileTitle(e.target.value)}
             placeholder="Book title (e.g. Atomic Habits)"
-            className="w-full rounded-lg border border-ink/15 bg-page/80 px-3 py-2 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
+            className="w-full rounded-lg border border-ink/10 bg-ink/[0.04] px-3 py-2 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
           />
           <input
             type="text"
@@ -568,7 +568,7 @@ export function LibraryPage({
             value={noFileAuthor}
             onChange={(e) => setNoFileAuthor(e.target.value)}
             placeholder="Author name (e.g. James Clear)"
-            className="w-full rounded-lg border border-ink/15 bg-page/80 px-3 py-2 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
+            className="w-full rounded-lg border border-ink/10 bg-ink/[0.04] px-3 py-2 text-xs text-ink placeholder:text-ink-soft/75 focus:border-leather focus:outline-none"
           />
           <button
             type="submit"
