@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { createSupabaseBrowserAuthClient } from "@/lib/db/supabase";
+import { speakNatural, stopTts, type TtsState } from "@/lib/voice/kokoroTts";
 import {
   UPLOAD_STORAGE_KEY,
   uploadToChatBook,
@@ -732,7 +733,7 @@ function AssistantMessage({
   const [savingNote, setSavingNote] = useState(false);
   const [rating, setRating] = useState<1 | -1 | null>(null);
   const [reasonPicker, setReasonPicker] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
+  const [ttsState, setTtsState] = useState<TtsState>("idle");
   const active = message.citations?.find((c) => c.n === openCitation);
 
   const handleSaveNote = async () => {
@@ -772,26 +773,12 @@ function AssistantMessage({
   };
 
   const toggleSpeak = () => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    if (speaking) {
-      window.speechSynthesis.cancel();
-      setSpeaking(false);
+    if (ttsState !== "idle") {
+      stopTts();
+      setTtsState("idle");
       return;
     }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(
-      message.content.replace(/\[\d+\]/g, "")
-    );
-    const voices = window.speechSynthesis.getVoices();
-    const standardVoice =
-      voices.find((v) => v.lang.startsWith("en") && v.localService) ||
-      voices.find((v) => v.lang.startsWith("en"));
-    if (standardVoice) utterance.voice = standardVoice;
-    utterance.rate = 1;
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-    setSpeaking(true);
-    window.speechSynthesis.speak(utterance);
+    void speakNatural(message.content, setTtsState);
   };
 
   return (
@@ -889,10 +876,14 @@ function AssistantMessage({
             onClick={toggleSpeak}
             className="inline-flex items-center gap-1 rounded-md px-2 py-1 transition hover:bg-ink/5 hover:text-ink"
           >
-            {speaking ? (
+            {ttsState !== "idle" ? (
               <>
                 <VolumeX className="h-3.5 w-3.5 text-leather" />
-                Stop
+                {ttsState === "loading"
+                  ? "Loading voice…"
+                  : ttsState === "synthesizing"
+                    ? "Speaking…"
+                    : "Stop"}
               </>
             ) : (
               <>
